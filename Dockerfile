@@ -34,7 +34,7 @@ RUN pip3 install runpod requests
 
 # Download checkpoints/vae/LoRA to include in image
 RUN wget -O models/loras/xl_more_art-full_v1.safetensors https://civitai.com/api/download/models/152309?token=e78be58c63f3877f09ad65e9ce4f4ec0
-RUN wget -O models/checkpoints/realisticVisionV60B1_v51VAE.safetensors https://civitai.com/api/download/models/130072?type=Model&format=SafeTensor&size=full&fp=fp16?token=e78be58c63f3877f09ad65e9ce4f4ec0
+RUN wget -O models/checkpoints/realisticVisionV60B1_v51VAE.safetensors https://civitai.com/api/download/models/130072?token=e78be58c63f3877f09ad65e9ce4f4ec0?type=Model&format=SafeTensor&size=full&fp=fp16
 
 # Example for adding specific models into image
 # ADD models/checkpoints/sd_xl_base_1.0.safetensors models/checkpoints/
