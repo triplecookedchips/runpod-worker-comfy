@@ -65,6 +65,12 @@ RUN cd custom_nodes/comfyui-reactor-node && pip3 install -r requirements.txt && 
     cd ../was-node-suite-comfyui && pip3 install -r requirements.txt && \
     cd ../..
 
+# Set up Insightface models
+RUN cd /comfyui/models/insightface && \
+    wget https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
+    unzip buffalo_l.zip -d models && \
+    rm buffalo_l.zip
+
 # Create model directories
 RUN mkdir -p models/clip_vision \
     models/ipadapter \
@@ -94,12 +100,6 @@ RUN wget -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/s
 RUN wget -O models/controlnet/control_v11p_sd15_openpose_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_openpose_fp16.safetensors && \
     wget -O models/controlnet/control_v11p_sd15_softedge_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_softedge_fp16.safetensors && \
     wget -O models/controlnet/control_v11u_sd15_tile_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11u_sd15_tile_fp16.safetensors
-
-# Set up Insightface models
-RUN cd /comfyui/models/insightface && \
-    wget https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
-    unzip buffalo_l.zip -d models && \
-    rm buffalo_l.zip
 
 # Set environment variables for model paths
 ENV INSIGHTFACE_MODEL_DIR=/comfyui/models/insightface/models
