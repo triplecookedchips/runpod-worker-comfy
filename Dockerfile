@@ -1,95 +1,115 @@
-# Stage 1: Base image with common dependencies
+# Use Nvidia CUDA base image with CUDA 11.8 and cuDNN 8
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
 
-# Prevents prompts from packages asking for user input during installation
-ENV DEBIAN_FRONTEND=noninteractive
-# Prefer binary wheels over source distributions for faster pip installations
-ENV PIP_PREFER_BINARY=1
-# Ensures output from python is printed immediately to the terminal without buffering
-ENV PYTHONUNBUFFERED=1 
-# Speed up some cmake builds
-ENV CMAKE_BUILD_PARALLEL_LEVEL=8
+# Environment variables for better Docker builds
+ENV DEBIAN_FRONTEND=noninteractive     # Prevents interactive prompts during build
+ENV PIP_PREFER_BINARY=1               # Prefer pre-built wheels for faster installation
+ENV PYTHONUNBUFFERED=1                # Immediate Python output without buffering
+ENV CMAKE_BUILD_PARALLEL_LEVEL=8       # Optimize cmake builds
 
-# Install Python, git and other necessary tools
-RUN apt-get update && apt-get install -y \
-    python3.10 \
+# System dependencies installation
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    python3-dev \
     python3-pip \
+    python3.10-venv \
+    fonts-dejavu-core \
+    rsync \
     git \
+    git-lfs \
+    jq \
+    moreutils \
+    aria2 \
     wget \
+    curl \
+    libglib2.0-0 \
+    libsm6 \
     libgl1 \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/bin/pip
+    libxrender1 \
+    libxext6 \
+    ffmpeg \
+    unzip \
+    libgoogle-perftools-dev \
+    procps \
+    build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Clean up to reduce image size
-RUN apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+# Clone ComfyUI and set specific version
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git /comfyui && \
+    cd /comfyui && \
+    # Using latest tested commit hash
+    git reset --hard d1cdf51e1b6929686e391d9245c9c040714739d9
 
-# Install comfy-cli
-RUN pip install comfy-cli
-
-# Install ComfyUI
-RUN /usr/bin/yes | comfy --workspace /comfyui install --cuda-version 11.8 --nvidia --version 0.2.7
-
-# Change working directory to ComfyUI
 WORKDIR /comfyui
 
-# Install runpod
-RUN pip install runpod requests
+# Install Python dependencies with updated PyTorch for CUDA 12.1
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121 && \
+    pip3 install --no-cache-dir xformers==0.0.23 && \
+    pip3 install -r requirements.txt && \
+    pip3 install --no-cache-dir onnxruntime-gpu runpod requests opencv-python insightface==0.7.3
 
-# Support for the network volume
-ADD src/extra_model_paths.yaml ./
+# Install custom nodes
+RUN git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git custom_nodes/ComfyUI_IPAdapter_plus && \
+    git clone https://github.com/Fannovel16/comfyui_controlnet_aux.git custom_nodes/comfyui_controlnet_aux && \
+    git clone https://github.com/cubiq/ComfyUI_essentials.git custom_nodes/ComfyUI_essentials && \
+    git clone https://github.com/nullquant/ComfyUI-BrushNet.git custom_nodes/ComfyUI-BrushNet && \
+    git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch.git custom_nodes/ComfyUI-Inpaint-CropAndStitch && \
+    git clone https://github.com/WASasquatch/was-node-suite-comfyui/ custom_nodes/was-node-suite-comfyui && \
+    git clone https://github.com/Gourieff/comfyui-reactor-node.git custom_nodes/comfyui-reactor-node
 
-# Go back to the root
-WORKDIR /
+# Install custom nodes requirements
+RUN cd custom_nodes/comfyui-reactor-node && pip3 install -r requirements.txt && \
+    cd ../ComfyUI-BrushNet && pip3 install -r requirements.txt && \
+    cd ../was-node-suite-comfyui && pip3 install -r requirements.txt && \
+    cd ../..
 
-# Add scripts
-ADD src/start.sh src/restore_snapshot.sh src/rp_handler.py test_input.json ./
+# Create model directories
+RUN mkdir -p models/clip_vision \
+    models/ipadapter \
+    models/checkpoints \
+    models/loras \
+    models/controlnet \
+    models/facerestore_models \
+    models/insightface \
+    models/facedetection
+
+# Download base models
+RUN wget -O models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors https://civitai.com/api/download/models/501286?token=e78be58c63f3877f09ad65e9ce4f4ec0
+
+# Download IPAdapter models
+RUN wget -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors && \
+    wget -O models/ipadapter/ip-adapter-faceid-plus_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plus_sd15.bin && \
+    wget -O models/ipadapter/ip-adapter-faceid-portrait-v11_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin && \
+    wget -O models/ipadapter/ip-adapter-faceid-plusv2_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin && \
+    wget -O models/ipadapter/ip-adapter-plus-face_sd15.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus-face_sd15.safetensors
+
+# Download face restoration models
+RUN wget -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth && \
+    wget -O models/facerestore_models/GFPGANv1.4.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth && \
+    wget -O models/insightface/inswapper_128.onnx https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx
+
+# Download Controlnet models
+RUN wget -O models/controlnet/control_v11p_sd15_openpose_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_openpose_fp16.safetensors && \
+    wget -O models/controlnet/control_v11p_sd15_softedge_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_softedge_fp16.safetensors && \
+    wget -O models/controlnet/control_v11u_sd15_tile_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11u_sd15_tile_fp16.safetensors
+
+# Set up Insightface models
+RUN cd /comfyui/models/insightface && \
+    wget https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
+    unzip buffalo_l.zip -d models && \
+    rm buffalo_l.zip
+
+# Set environment variables for model paths
+ENV INSIGHTFACE_MODEL_DIR=/comfyui/models/insightface/models
+ENV FACEDETECTION_MODEL_DIR=/comfyui/models/facedetection
+ENV CONTROLNET_ANNOTATOR_MODELS_PATH="/comfyui/models/annotators"
+
+# Copy and setup scripts
+COPY src/start.sh src/restore_snapshot.sh src/rp_handler.py test_input.json /
 RUN chmod +x /start.sh /restore_snapshot.sh
 
-# Optionally copy the snapshot file
-ADD *snapshot*.json /
-
-# Restore the snapshot to install custom nodes
-RUN /restore_snapshot.sh
-
-# Start container
-CMD ["/start.sh"]
-
-# Stage 2: Download models
-FROM base as downloader
-
-ARG HUGGINGFACE_ACCESS_TOKEN
-ARG MODEL_TYPE
-
-# Change working directory to ComfyUI
-WORKDIR /comfyui
-
-# Create necessary directories
-RUN mkdir -p models/checkpoints models/vae
-
-# Download checkpoints/vae/LoRA to include in image based on model type
-RUN if [ "$MODEL_TYPE" = "sdxl" ]; then \
-      wget -O models/checkpoints/sd_xl_base_1.0.safetensors https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors && \
-      wget -O models/vae/sdxl_vae.safetensors https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors && \
-      wget -O models/vae/sdxl-vae-fp16-fix.safetensors https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl_vae.safetensors; \
-    elif [ "$MODEL_TYPE" = "sd3" ]; then \
-      wget --header="Authorization: Bearer ${HUGGINGFACE_ACCESS_TOKEN}" -O models/checkpoints/sd3_medium_incl_clips_t5xxlfp8.safetensors https://huggingface.co/stabilityai/stable-diffusion-3-medium/resolve/main/sd3_medium_incl_clips_t5xxlfp8.safetensors; \
-    elif [ "$MODEL_TYPE" = "flux1-schnell" ]; then \
-      wget -O models/unet/flux1-schnell.safetensors https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors && \
-      wget -O models/clip/clip_l.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors && \
-      wget -O models/clip/t5xxl_fp8_e4m3fn.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors && \
-      wget -O models/vae/ae.safetensors https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors; \
-    elif [ "$MODEL_TYPE" = "flux1-dev" ]; then \
-      wget --header="Authorization: Bearer ${HUGGINGFACE_ACCESS_TOKEN}" -O models/unet/flux1-dev.safetensors https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors && \
-      wget -O models/clip/clip_l.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors && \
-      wget -O models/clip/t5xxl_fp8_e4m3fn.safetensors https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors && \
-      wget --header="Authorization: Bearer ${HUGGINGFACE_ACCESS_TOKEN}" -O models/vae/ae.safetensors https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors; \
-    fi
-
-# Stage 3: Final image
-FROM base as final
-
-# Copy models from stage 2 to the final image
-COPY --from=downloader /comfyui/models /comfyui/models
-
-# Start container
+# Set working directory and start command
+WORKDIR /
 CMD ["/start.sh"]
