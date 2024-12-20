@@ -2,10 +2,10 @@
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
 
 # Environment variables for better Docker builds
-ENV DEBIAN_FRONTEND=noninteractive     # Prevents interactive prompts during build
-ENV PIP_PREFER_BINARY=1               # Prefer pre-built wheels for faster installation
-ENV PYTHONUNBUFFERED=1                # Immediate Python output without buffering
-ENV CMAKE_BUILD_PARALLEL_LEVEL=8       # Optimize cmake builds
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_PREFER_BINARY=1
+ENV PYTHONUNBUFFERED=1
+ENV CMAKE_BUILD_PARALLEL_LEVEL=8
 
 # AWS environment variables will be provided at runtime through RunPod
 ENV BUCKET_ENDPOINT_URL=""
@@ -40,12 +40,25 @@ RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Clone ComfyUI and set specific version
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git /comfyui && \
-    cd /comfyui && \
-    git reset --hard 9f4b181ab38b246961c5a51994a8357e62634de1
-
+# Create base directories with proper permissions
+RUN mkdir -p /comfyui
 WORKDIR /comfyui
+
+# Create all model directories
+RUN mkdir -p models/clip_vision \
+    models/ipadapter \
+    models/checkpoints \
+    models/loras \
+    models/controlnet \
+    models/facerestore_models \
+    models/insightface/models \
+    models/facedetection \
+    models/annotators && \
+    chmod -R 755 models
+
+# Clone ComfyUI and set specific version
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
+    git reset --hard 9f4b181ab38b246961c5a51994a8357e62634de1
 
 # Install Python dependencies with updated PyTorch for CUDA 12.1
 RUN pip3 install --no-cache-dir --upgrade pip && \
@@ -69,42 +82,32 @@ RUN cd custom_nodes/comfyui-reactor-node && pip3 install -r requirements.txt && 
     cd ../was-node-suite-comfyui && pip3 install -r requirements.txt && \
     cd ../..
 
-# Set up Insightface models
-RUN cd /comfyui/models/insightface && \
-    wget https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
-    unzip buffalo_l.zip -d models && \
+# Download and setup Insightface models
+RUN cd models/insightface && \
+    wget -q https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
+    unzip -q buffalo_l.zip -d models && \
     rm buffalo_l.zip
 
-# Create model directories
-RUN mkdir -p models/clip_vision \
-    models/ipadapter \
-    models/checkpoints \
-    models/loras \
-    models/controlnet \
-    models/facerestore_models \
-    models/insightface \
-    models/facedetection
-
 # Download base models
-RUN wget -O models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors https://civitai.com/api/download/models/501286?token=e78be58c63f3877f09ad65e9ce4f4ec0
+RUN wget -q -O models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors https://civitai.com/api/download/models/501286?token=e78be58c63f3877f09ad65e9ce4f4ec0
 
 # Download IPAdapter models
-RUN wget -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors && \
-    wget -O models/ipadapter/ip-adapter-faceid-plus_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plus_sd15.bin && \
-    wget -O models/ipadapter/ip-adapter-full-face_sd15.bin https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-full-face_sd15.bin && \
-    wget -O models/ipadapter/ip-adapter-faceid-portrait-v11_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin && \
-    wget -O models/ipadapter/ip-adapter-faceid-plusv2_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin && \
-    wget -O models/ipadapter/ip-adapter-faceid-plusv2_sdxl_lora.safetensors https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors
+RUN wget -q -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors && \
+    wget -q -O models/ipadapter/ip-adapter-faceid-plus_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plus_sd15.bin && \
+    wget -q -O models/ipadapter/ip-adapter-full-face_sd15.bin https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-full-face_sd15.bin && \
+    wget -q -O models/ipadapter/ip-adapter-faceid-portrait-v11_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin && \
+    wget -q -O models/ipadapter/ip-adapter-faceid-plusv2_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin && \
+    wget -q -O models/ipadapter/ip-adapter-faceid-plusv2_sdxl_lora.safetensors https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors
 
 # Download face restoration models
-RUN wget -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth && \
-    wget -O models/facerestore_models/GFPGANv1.4.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth && \
-    wget -O models/insightface/inswapper_128.onnx https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx
+RUN wget -q -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth && \
+    wget -q -O models/facerestore_models/GFPGANv1.4.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth && \
+    wget -q -O models/insightface/inswapper_128.onnx https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx
 
 # Download Controlnet models
-RUN wget -O models/controlnet/control_v11p_sd15_openpose_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_openpose_fp16.safetensors && \
-    wget -O models/controlnet/control_v11p_sd15_softedge_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_softedge_fp16.safetensors && \
-    wget -O models/controlnet/control_v11u_sd15_tile_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11u_sd15_tile_fp16.safetensors
+RUN wget -q -O models/controlnet/control_v11p_sd15_openpose_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_openpose_fp16.safetensors && \
+    wget -q -O models/controlnet/control_v11p_sd15_softedge_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_softedge_fp16.safetensors && \
+    wget -q -O models/controlnet/control_v11u_sd15_tile_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11u_sd15_tile_fp16.safetensors
 
 # Set environment variables for model paths
 ENV INSIGHTFACE_MODEL_DIR=/comfyui/models/insightface/models
