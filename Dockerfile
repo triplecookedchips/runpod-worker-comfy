@@ -7,6 +7,11 @@ ENV PIP_PREFER_BINARY=1               # Prefer pre-built wheels for faster insta
 ENV PYTHONUNBUFFERED=1                # Immediate Python output without buffering
 ENV CMAKE_BUILD_PARALLEL_LEVEL=8       # Optimize cmake builds
 
+# AWS environment variables will be provided at runtime through RunPod
+ENV BUCKET_ENDPOINT_URL=""
+ENV BUCKET_ACCESS_KEY_ID=""
+ENV BUCKET_SECRET_ACCESS_KEY=""
+
 # System dependencies installation
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
@@ -38,7 +43,6 @@ RUN apt-get update && apt-get upgrade -y && \
 # Clone ComfyUI and set specific version
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /comfyui && \
     cd /comfyui && \
-    # Using latest tested commit hash
     git reset --hard 9f4b181ab38b246961c5a51994a8357e62634de1
 
 WORKDIR /comfyui
@@ -48,7 +52,7 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121 && \
     pip3 install --no-cache-dir xformers==0.0.23 && \
     pip3 install -r requirements.txt && \
-    pip3 install --no-cache-dir onnxruntime-gpu runpod requests opencv-python insightface==0.7.3
+    pip3 install --no-cache-dir onnxruntime-gpu runpod requests opencv-python insightface==0.7.3 boto3
 
 # Install custom nodes
 RUN git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git custom_nodes/ComfyUI_IPAdapter_plus && \
