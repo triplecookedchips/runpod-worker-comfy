@@ -39,7 +39,7 @@ RUN apt-get update && apt-get upgrade -y && \
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /comfyui && \
     cd /comfyui && \
     # Using latest tested commit hash
-    git reset --hard d1cdf51e1b6929686e391d9245c9c040714739d9
+    git reset --hard 9f4b181ab38b246961c5a51994a8357e62634de1
 
 WORKDIR /comfyui
 
@@ -83,7 +83,7 @@ RUN wget -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors https
     wget -O models/ipadapter/ip-adapter-faceid-plus_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plus_sd15.bin && \
     wget -O models/ipadapter/ip-adapter-faceid-portrait-v11_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-portrait-v11_sd15.bin && \
     wget -O models/ipadapter/ip-adapter-faceid-plusv2_sd15.bin https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sd15.bin && \
-    wget -O models/ipadapter/ip-adapter-plus-face_sd15.safetensors https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus-face_sd15.safetensors
+    wget -O models/ipadapter/ip-adapter-faceid-plusv2_sdxl_lora.safetensors https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors
 
 # Download face restoration models
 RUN wget -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth && \
