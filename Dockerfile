@@ -74,7 +74,8 @@ RUN git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git custom_nodes/C
     git clone https://github.com/nullquant/ComfyUI-BrushNet.git custom_nodes/ComfyUI-BrushNet && \
     git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch.git custom_nodes/ComfyUI-Inpaint-CropAndStitch && \
     git clone https://github.com/WASasquatch/was-node-suite-comfyui/ custom_nodes/was-node-suite-comfyui && \
-    git clone https://github.com/Gourieff/comfyui-reactor-node.git custom_nodes/comfyui-reactor-node
+    git clone https://github.com/Gourieff/comfyui-reactor-node.git custom_nodes/comfyui-reactor-node && \
+    git clone https://github.com/Goktug/comfyui-saveimage-plus
 
 # Install custom nodes requirements
 RUN cd custom_nodes/comfyui-reactor-node && pip3 install -r requirements.txt && \
@@ -102,7 +103,7 @@ RUN wget -q -O models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors ht
 # Download face restoration models
 RUN wget -q -O models/facerestore_models/codeformer-v0.1.0.pth https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth && \
     wget -q -O models/facerestore_models/GFPGANv1.4.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth && \
-    wget -q -O models/insightface/inswapper_128.onnx https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx
+    wget -q -O models/insightface/inswapper_128.onnx https://huggingface.co/netrunner-exe/Insight-Swap-models/resolve/main/inswapper_128.fp16.onnx
 
 # Download Controlnet models
 RUN wget -q -O models/controlnet/control_v11p_sd15_openpose_fp16.safetensors https://huggingface.co/comfyanonymous/ControlNet-v1-1_fp16_safetensors/resolve/main/control_v11p_sd15_openpose_fp16.safetensors && \
