@@ -23,6 +23,171 @@ COMFY_HOST = "127.0.0.1:8188"
 # see https://docs.runpod.io/docs/handler-additional-controls#refresh-worker
 REFRESH_WORKER = os.environ.get("REFRESH_WORKER", "false").lower() == "true"
 
+def warmup_workflow():
+    """
+    Creates a minimal workflow that loads models but does minimal processing.
+    This helps warm up the worker by loading models into memory.
+    """
+    return {
+  "1": {
+    "inputs": {
+      "ckpt_name": "realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "2": {
+    "inputs": {
+      "text": "a fish",
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "blurry",
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "5": {
+    "inputs": {
+      "seed": 895441426284980,
+      "steps": 2,
+      "cfg": 2,
+      "sampler_name": "dpm_2",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "2",
+        0
+      ],
+      "negative": [
+        "3",
+        0
+      ],
+      "latent_image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "6": {
+    "inputs": {
+      "samples": [
+        "5",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "7": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
+
+def initialize_worker():
+    """
+    Initializes the worker by running a warmup workflow to preload models.
+    Uses existing retry mechanisms and error handling patterns.
+    """
+    print("runpod-worker-comfy - Starting worker initialization...")
+    
+    # Reuse existing API availability check
+    api_available = check_server(
+        f"http://{COMFY_HOST}",
+        COMFY_API_AVAILABLE_MAX_RETRIES,
+        COMFY_API_AVAILABLE_INTERVAL_MS,
+    )
+    
+    if not api_available:
+        print("runpod-worker-comfy - Failed to connect to ComfyUI API during initialization")
+        return
+    
+    try:
+        # Queue the warmup workflow
+        workflow = warmup_workflow()
+        queued_workflow = queue_workflow(workflow)
+        
+        if not queued_workflow or "prompt_id" not in queued_workflow:
+            print("runpod-worker-comfy - Failed to queue warmup workflow")
+            return
+            
+        prompt_id = queued_workflow["prompt_id"]
+        print(f"runpod-worker-comfy - Queued warmup workflow with ID {prompt_id}")
+        
+        # Poll for completion using existing polling constants
+        retries = 0
+        while retries < COMFY_POLLING_MAX_RETRIES:
+            try:
+                history = get_history(prompt_id)
+                
+                if prompt_id in history and history[prompt_id].get("outputs"):
+                    print("runpod-worker-comfy - Warmup complete, models are loaded")
+                    return
+                
+                time.sleep(COMFY_POLLING_INTERVAL_MS / 1000)
+                retries += 1
+                
+            except Exception as poll_error:
+                print(f"runpod-worker-comfy - Error polling warmup status: {str(poll_error)}")
+                time.sleep(COMFY_POLLING_INTERVAL_MS / 1000)
+                retries += 1
+                
+        print("runpod-worker-comfy - Warmup timed out after maximum retries")
+        
+    except Exception as e:
+        print(f"runpod-worker-comfy - Error during initialization: {str(e)}")
 
 def validate_input(job_input):
     """
@@ -347,4 +512,5 @@ def handler(job):
 
 # Start the handler only if this script is run directly
 if __name__ == "__main__":
+    initialize_worker()  # Run initialization first
     runpod.serverless.start({"handler": handler})
